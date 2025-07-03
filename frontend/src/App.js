@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LabelList, PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
 import { FaFileAlt, FaUpload, FaDownload, FaCog, FaChevronDown, FaChevronUp, FaSpinner } from 'react-icons/fa';
 import { useDropzone } from 'react-dropzone';
 
@@ -63,8 +63,8 @@ function CollapsiblePanel({ title, children, defaultOpen = false, borderColor = 
         onFocus={e => (e.target.style.outline = `2px solid ${focusColor}`)}
         onBlur={e => (e.target.style.outline = 'none')}
       >
-        <span style={{ flex: 1 }}>{title}</span>
-        <span style={{ fontSize: 18, color: headerColor, transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+        <span style={{ flex: 1, color: 'rgb(31, 106, 74)' }}>{title}</span>
+        <span style={{ fontSize: 18, color: 'rgb(31, 106, 74)', transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>
           ▶
         </span>
       </button>
@@ -133,6 +133,377 @@ function PredictedCategoriesTable({ data }) {
   );
 }
 
+// Add NPSPanel component
+function NPSPanel({ data, columns }) {
+  // Find NPS column index
+  const npsCol = columns.find(col => /nps/i.test(col));
+  if (!npsCol) return null;
+  const idx = columns.indexOf(npsCol);
+  // Clean NPS rows independently: Only keep rows where NPS is an integer between 0 and 10 (inclusive), and not null/empty
+  const npsRows = data.filter(row => {
+    const val = row[idx];
+    if (val === undefined || val === null || String(val).trim() === '') return false;
+    const num = Number(val);
+    return Number.isInteger(num) && num >= 0 && num <= 10;
+  });
+  const npsVals = npsRows.map(row => Number(row[idx]));
+  const total = npsVals.length;
+  // Count for each score 0-10
+  const scoreCounts = Array(11).fill(0);
+  npsVals.forEach(v => { if (v >= 0 && v <= 10) scoreCounts[v]++; });
+  // Count categories
+  const detractors = npsVals.filter(v => v >= 0 && v <= 6).length;
+  const passives = npsVals.filter(v => v === 7 || v === 8).length;
+  const promoters = npsVals.filter(v => v === 9 || v === 10).length;
+  // Percentages
+  const pct = x => total ? ((x / total) * 100).toFixed(2) : '0.00';
+  const npsScore = total ? ( ((promoters / total) * 100) - ((detractors / total) * 100) ).toFixed(2) : '0.00';
+
+  // Face SVGs for each score (0-10)
+  const faceSvgs = [
+    { color: '#ff5e7b', face: '😡', label: 'Detractor' }, // 0
+    { color: '#ff5e7b', face: '😠', label: 'Detractor' }, // 1
+    { color: '#ff5e7b', face: '😞', label: 'Detractor' }, // 2
+    { color: '#ff5e7b', face: '😕', label: 'Detractor' }, // 3
+    { color: '#ff5e7b', face: '😟', label: 'Detractor' }, // 4
+    { color: '#ff5e7b', face: '🙁', label: 'Detractor' }, // 5
+    { color: '#ff5e7b', face: '☹️', label: 'Detractor' }, // 6
+    { color: '#ffe066', face: '😐', label: 'Passive' }, // 7
+    { color: '#ffe066', face: '🙂', label: 'Passive' }, // 8
+    { color: '#43b581', face: '😊', label: 'Promoter' }, // 9
+    { color: '#43b581', face: '😁', label: 'Promoter' }, // 10
+  ];
+
+  // Bar segment colors (gradient for depth)
+  const barColors = [
+    ...Array(7).fill('linear-gradient(90deg, #ff5e7b 60%, #ff7b9c 100%)'), // Detractors
+    ...Array(2).fill('linear-gradient(90deg, #ffe066 60%, #fff3a3 100%)'), // Passives
+    ...Array(2).fill('linear-gradient(90deg, #43b581 60%, #6be6a8 100%)'), // Promoters
+  ];
+
+  // Accessibility: focus style
+  const focusOutline = '2px solid #ffe066';
+
+  return (
+    <CollapsiblePanel
+      title="Net Promoter Score"
+      defaultOpen={false}
+      borderColor="#184c36"
+      focusColor="#ffe066"
+      headerColor="#ffe066"
+      bgColor="#184c36"
+      ariaLabel="Net Promoter Score"
+    >
+      <div
+        style={{
+          width: '100%',
+          color: '#ffe066',
+          fontFamily: 'Inter, Segoe UI, Arial, sans-serif',
+          textAlign: 'center',
+          position: 'relative',
+        }}
+      >
+        {/* NPS Score */}
+        <div style={{
+          fontSize: 64,
+          fontWeight: 900,
+          color: '#ffe066',
+          textShadow: '0 0 16px #ffe06688',
+          marginBottom: 10,
+          letterSpacing: 1,
+        }}>{npsScore}</div>
+        <div style={{ fontSize: 18, color: '#fff', fontWeight: 700, marginBottom: 30, letterSpacing: 0.5 }}>Net Promoter Score</div>
+        {/* Category totals with emojis in colored circles */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 32, marginBottom: 30 }}>
+          {/* Detractors */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <span style={{ background: '#ff5e7b', color: '#fff', borderRadius: '50%', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, boxShadow: '0 2px 8px #ff5e7b44' }} aria-label="Detractors" title="Detractors">😡</span>
+            <span style={{ fontWeight: 800, fontSize: 20, marginTop: 6 }}>{detractors}</span>
+            <span style={{ fontSize: 13, color: '#ffb3c6', fontWeight: 700 }}>{pct(detractors)}%</span>
+          </div>
+          {/* Passives */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <span style={{ background: '#ffe066', color: '#222', borderRadius: '50%', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, boxShadow: '0 2px 8px #ffe06644' }} aria-label="Passives" title="Passives">😐</span>
+            <span style={{ fontWeight: 800, fontSize: 20, marginTop: 6 }}>{passives}</span>
+            <span style={{ fontSize: 13, color: '#fff3a3', fontWeight: 700 }}>{pct(passives)}%</span>
+          </div>
+          {/* Promoters */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <span style={{ background: '#43b581', color: '#fff', borderRadius: '50%', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, boxShadow: '0 2px 8px #43b58144' }} aria-label="Promoters" title="Promoters">😁</span>
+            <span style={{ fontWeight: 800, fontSize: 20, marginTop: 6 }}>{promoters}</span>
+            <span style={{ fontSize: 13, color: '#b6f5d2', fontWeight: 700 }}>{pct(promoters)}%</span>
+          </div>
+        </div>
+        {/* Ratings breakdown with faces */}
+        <div style={{
+          width: '100%',
+          maxWidth: '1100px',
+          margin: '0 auto 18px auto',
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'flex-end',
+          gap: 0,
+          flexWrap: 'nowrap',
+          overflowX: 'auto',
+        }}>
+          {scoreCounts.map((count, score) => (
+            <div key={score} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '1 1 0', minWidth: 60 }}>
+              <span style={{ fontSize: 44, color: faceSvgs[score].color, lineHeight: 1 }}>{faceSvgs[score].face}</span>
+              <span style={{ fontSize: 22, color: '#fff', fontWeight: 900, marginTop: 6, marginBottom: 2 }}>{count}</span>
+              <span style={{
+                display: 'inline-block',
+                marginTop: 2,
+                fontSize: 18,
+                fontWeight: 700,
+                color: '#fff',
+                background: '#232a36',
+                borderRadius: 12,
+                padding: '2px 14px',
+                minWidth: 28,
+                textAlign: 'center',
+                marginBottom: 2,
+                letterSpacing: 1,
+              }}>{score}</span>
+            </div>
+          ))}
+        </div>
+        {/* Detractors, Passives, Promoters segmented bar */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: 0,
+          margin: '0 auto 18px auto',
+          width: '100%',
+          maxWidth: '1100px',
+          height: 32,
+          borderRadius: 16,
+          overflow: 'hidden',
+          background: '#232a36',
+          boxShadow: '0 1px 8px #0002',
+        }}>
+          {scoreCounts.map((count, score) => (
+            <div
+              key={score}
+              style={{
+                flex: 1,
+                height: '100%',
+                background: barColors[score],
+                transition: 'transform 0.15s, box-shadow 0.15s',
+                cursor: 'pointer',
+              }}
+              tabIndex={0}
+              aria-label={faceSvgs[score].label + ' ' + score}
+              title={faceSvgs[score].label + ' ' + score}
+              onFocus={e => (e.target.style.outline = focusOutline)}
+              onBlur={e => (e.target.style.outline = 'none')}
+              onMouseOver={e => {
+                e.currentTarget.style.transform = 'scaleY(1.18)';
+                e.currentTarget.style.boxShadow = `0 2px 12px ${faceSvgs[score].color}77`;
+              }}
+              onMouseOut={e => {
+                e.currentTarget.style.transform = 'none';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            />
+          ))}
+        </div>
+        <div style={{ fontSize: 15, color: '#ffe066', marginTop: 8, fontWeight: 700, letterSpacing: 0.2 }}>NPS = %Promoters - %Detractors</div>
+        <div style={{ color: '#b6b6b6', fontSize: 14, marginTop: 4 }}>Total responses: {total}</div>
+      </div>
+    </CollapsiblePanel>
+  );
+}
+
+// DonutChartsPanel component
+function DonutChartsPanel({ data, columns }) {
+  // Flexible matching: map logical names to actual columns
+  const logicalColumns = [
+    'CSAT_Overal',
+    'CSAT_Overall',
+    'Speed of Delivery',
+    'Shipment Condition',
+    'Courier Behavior',
+  ];
+  // Helper to normalize column names
+  const normalize = s => s.toLowerCase().replace(/[_\s]+/g, '');
+  // Map logical names to actual columns in the uploaded file
+  const colMap = {};
+  logicalColumns.forEach(logical => {
+    const norm = normalize(logical);
+    const found = columns.find(c => normalize(c) === norm);
+    if (found) colMap[logical] = found;
+  });
+  const accent = '#ffe066';
+  const bgCard = 'rgba(24, 40, 34, 0.98)';
+  const bgGradient = 'linear-gradient(135deg, #1a2822 60%, #184c36 100%)';
+  const fontFamily = 'Poppins, Inter, Segoe UI, Arial, sans-serif';
+  const colors = {
+    unsatisfied: '#ff5e7b',
+    normal: '#ffe066',
+    satisfied: '#43b581',
+  };
+  const legend = [
+    { name: 'Unsatisfied', color: colors.unsatisfied },
+    { name: 'Normal', color: colors.normal },
+    { name: 'Satisfied', color: colors.satisfied },
+  ];
+  const getDonutData = (col) => {
+    const actualCol = colMap[col];
+    if (!actualCol) return null;
+    const idx = columns.indexOf(actualCol);
+    if (idx < 0) return null;
+    // Clean: only rows where value is integer 1-5
+    const vals = data
+      .map(row => Number(row[idx]))
+      .filter(v => Number.isInteger(v) && v >= 1 && v <= 5);
+    const total = vals.length;
+    const unsatisfied = vals.filter(v => v === 1 || v === 2).length;
+    const normal = vals.filter(v => v === 3).length;
+    const satisfied = vals.filter(v => v === 4 || v === 5).length;
+    return [
+      { name: 'Unsatisfied', value: unsatisfied, color: colors.unsatisfied },
+      { name: 'Normal', value: normal, color: colors.normal },
+      { name: 'Satisfied', value: satisfied, color: colors.satisfied },
+      { total },
+    ];
+  };
+  // Custom tooltip for donut chart
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const entry = payload[0].payload;
+      return (
+        <div style={{ background: '#184c36', borderRadius: 16, padding: '14px 22px', fontSize: 20, boxShadow: '0 2px 16px #0008', fontFamily, minWidth: 180 }}>
+          <div style={{ fontWeight: 900, color: entry.color, fontSize: 22, marginBottom: 2 }}>{entry.name}</div>
+          <div style={{ fontWeight: 900, color: entry.color, fontSize: 24 }}>
+            {entry.value} <span style={{ fontWeight: 700, color: entry.color }}>({entry.percent}%)</span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+  return (
+    <CollapsiblePanel
+      title="Donut Charts"
+      defaultOpen={false}
+      borderColor="#184c36"
+      focusColor={accent}
+      headerColor={accent}
+      bgColor="#184c36"
+      ariaLabel="Donut Charts"
+    >
+      <div style={{
+        width: '100%',
+        maxWidth: '1400px',
+        margin: '0 auto',
+        padding: '24px 0 12px 0',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 48,
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+        fontFamily,
+        position: 'relative',
+      }}>
+        {logicalColumns.map(col => {
+          const donutData = getDonutData(col);
+          if (!donutData) return null;
+          const [unsatisfied, normal, satisfied, meta] = donutData;
+          // Add percent and icon to each entry for tooltip
+          const total = meta.total;
+          const chartData = [unsatisfied, normal, satisfied].map((e, i) => ({ ...e, percent: total ? ((e.value/total)*100).toFixed(1) : 0 }));
+          // Center score as highlight
+          const score = total ? ((satisfied.value / total) * 100).toFixed(1) : '0.0';
+          return (
+            <div key={col} style={{
+              width: 370,
+              minWidth: 300,
+              textAlign: 'center',
+              color: accent,
+              fontFamily,
+              background: bgCard,
+              borderRadius: 18,
+              boxShadow: '0 4px 24px 0 rgba(0,0,0,0.18)',
+              padding: '32px 18px 22px 18px',
+              marginBottom: 24,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              position: 'relative',
+              transition: 'box-shadow 0.18s',
+            }}>
+              <div style={{ fontWeight: 900, fontSize: 24, marginBottom: 10, color: accent, letterSpacing: 0.5, fontFamily }}>
+                {col.replace(/_/g, ' ')}
+              </div>
+              <div style={{ fontWeight: 900, fontSize: 38, color: colors.satisfied, textShadow: '0 0 16px #43b58155', marginBottom: 6, fontFamily }}>
+                {score}%
+              </div>
+              <div style={{ fontSize: 15, color: '#b6b6b6', marginBottom: 18, fontWeight: 600, fontFamily }}>Satisfied</div>
+              <ResponsiveContainer width={170} height={170}>
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    labelLine={false}
+                    isAnimationActive={true}
+                    animationDuration={800}
+                    animationEasing="ease-out"
+                  >
+                    {chartData.map((entry, idx) => (
+                      <Cell
+                        key={entry.name}
+                        fill={entry.color}
+                        style={{
+                          filter: 'drop-shadow(0 0 6px ' + entry.color + '33)',
+                          transition: 'filter 0.18s, transform 0.18s',
+                          cursor: 'pointer',
+                        }}
+                        onMouseOver={e => {
+                          e.target.style.filter = 'drop-shadow(0 0 16px ' + entry.color + '99)';
+                          e.target.style.transform = 'scale(1.06)';
+                        }}
+                        onMouseOut={e => {
+                          e.target.style.filter = 'drop-shadow(0 0 6px ' + entry.color + '33)';
+                          e.target.style.transform = 'none';
+                        }}
+                        tabIndex={0}
+                        aria-label={entry.name + ' segment'}
+                      />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip content={<CustomTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 22, marginTop: 22, marginBottom: 8, fontFamily }}>
+                {legend.map(l => (
+                  <span key={l.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 16, color: l.color }}>
+                    <span style={{ width: 15, height: 15, borderRadius: '50%', background: l.color, display: 'inline-block', boxShadow: `0 1px 4px ${l.color}55`, marginRight: 3 }}></span>
+                    <span>{l.name}</span>
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 17, fontWeight: 700, width: '100%', fontFamily }}>
+                <span style={{ color: colors.unsatisfied, display: 'flex', alignItems: 'center', gap: 3 }}> {unsatisfied.value} <span style={{ fontSize: 14, fontWeight: 500, color: colors.unsatisfied }}>({total ? ((unsatisfied.value/total)*100).toFixed(1) : 0}%)</span></span>
+                <span style={{ color: colors.normal, display: 'flex', alignItems: 'center', gap: 3 }}> {normal.value} <span style={{ fontSize: 14, fontWeight: 500, color: colors.normal }}>({total ? ((normal.value/total)*100).toFixed(1) : 0}%)</span></span>
+                <span style={{ color: colors.satisfied, display: 'flex', alignItems: 'center', gap: 3 }}> {satisfied.value} <span style={{ fontSize: 14, fontWeight: 500, color: colors.satisfied }}>({total ? ((satisfied.value/total)*100).toFixed(1) : 0}%)</span></span>
+              </div>
+              <div style={{ color: '#b6b6b6', fontSize: 15, marginTop: 12, fontWeight: 600, fontFamily }}>Total: {meta.total}</div>
+            </div>
+          );
+        })}
+      </div>
+    </CollapsiblePanel>
+  );
+}
+
 function App() {
   // State
   const [excelData, setExcelData] = useState([]);
@@ -149,6 +520,7 @@ function App() {
   const [showColumnSelect, setShowColumnSelect] = useState(false);
   const [filter, setFilter] = useState({ start: '', end: '' });
   const [analysisOpen, setAnalysisOpen] = useState(true);
+  const [rawExcelData, setRawExcelData] = useState([]);
   const fileInputRef = useRef();
 
   // Drag-and-drop
@@ -177,14 +549,15 @@ function App() {
       const wsname = wb.SheetNames[0];
       const ws = wb.Sheets[wsname];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
-      if (data.length > 0) {
-        setExcelColumns(data[0]);
-        setExcelData(data.slice(1));
-        setSelectedColumn('');
-        setClassifiedRows([]);
-        setCategorySummary([]);
-        setSortConfig({ key: 'text', direction: 'asc' });
-      }
+      setRawExcelData(data.slice(1)); // Store all rows, even empty/invalid
+      // Remove completely empty rows for main app logic
+      const cleanedData = data.slice(1).filter(row => row.some(cell => cell !== undefined && cell !== null && String(cell).trim() !== ''));
+      setExcelColumns(data[0]);
+      setExcelData(cleanedData);
+      setSelectedColumn('');
+      setClassifiedRows([]);
+      setCategorySummary([]);
+      setSortConfig({ key: 'text', direction: 'asc' });
     };
     reader.readAsBinaryString(file);
   };
@@ -213,7 +586,9 @@ function App() {
     setCategorySummary([]);
     try {
       const colIdx = excelColumns.indexOf(selectedColumn);
-      const feedbacks = excelData.map(row => row[colIdx]);
+      // Only keep rows where the selected column is not empty
+      const filteredRows = excelData.filter(row => row[colIdx] !== undefined && row[colIdx] !== null && String(row[colIdx]).trim() !== '');
+      const feedbacks = filteredRows.map(row => row[colIdx]);
       const results = [];
       for (let i = 0; i < feedbacks.length; i++) {
         const text = feedbacks[i];
@@ -222,7 +597,7 @@ function App() {
           continue;
         }
         // eslint-disable-next-line no-await-in-loop
-        const response = await axios.post('https://customer-feedback-classifier.onrender.com/predict', { text });
+        const response = await axios.post("http://localhost:8000/predict", { text });  
         // Simulate confidence: if no categories, use max probability as confidence (for demo, randomize)
         let confidence = 0;
         if (response.data.categories.length === 0) {
@@ -241,6 +616,23 @@ function App() {
         });
       });
       setCategorySummary(Object.entries(catCount).map(([name, count]) => ({ name, count })));
+
+      // Clean specific columns after classifying
+      const columnsToClean = [
+        'NPS',
+        'CSAT_Overal',
+        'Speed of Delivery',
+        'Shipment Condition',
+        'Courier Behavior'
+      ];
+      // Find the indexes of these columns
+      const colIndexes = columnsToClean.map(col => excelColumns.indexOf(col));
+      // Remove rows where all these columns are empty or whitespace
+      const cleanedRows = filteredRows.filter(row =>
+        colIndexes.some(idx => idx >= 0 && row[idx] !== undefined && row[idx] !== null && String(row[idx]).trim() !== '')
+      );
+      // Optionally, update excelData with cleanedRows if you want to reflect this in the UI
+      setExcelData(cleanedRows);
     } catch (err) {
       setError('Error classifying feedbacks.');
     } finally {
@@ -251,7 +643,10 @@ function App() {
   // Download Results
   const handleDownload = () => {
     const headers = ['Feedback', 'Predicted Categories', 'Confidence'];
-    const rows = classifiedRows.map(r => [r.text, r.categories.join(', '), r.confidence]);
+    // Only filter out rows with empty feedback (if needed)
+    const rows = classifiedRows
+      .filter(r => r.text && String(r.text).trim() !== '')
+      .map(r => [r.text, r.categories ? r.categories.join(', ') : '', r.confidence]);
     let csv = headers.join(',') + '\n';
     rows.forEach(row => {
       csv += row.map(x => '"' + String(x).replace(/"/g, '""') + '"').join(',') + '\n';
@@ -352,16 +747,27 @@ function App() {
     });
   };
 
+  // Helper: clean rows for a specific column (removes rows where that column is empty)
+  const cleanRowsForColumn = (data, columns, columnName) => {
+    const idx = columns.indexOf(columnName);
+    if (idx < 0) return [];
+    return data.filter(row => row[idx] !== undefined && row[idx] !== null && String(row[idx]).trim() !== '');
+  };
+
   // Helper: calculate averages
   const calcAverages = (data) => {
     const npsCol = getNPSColumn();
     const npsIdx = npsCol ? excelColumns.indexOf(npsCol) : -1;
-    const npsVals = npsIdx >= 0 ? data.map(row => Number(row[npsIdx])).filter(v => !isNaN(v)) : [];
+    // Clean NPS rows
+    const npsData = npsCol ? cleanRowsForColumn(data, excelColumns, npsCol) : [];
+    const npsVals = npsIdx >= 0 ? npsData.map(row => Number(row[npsIdx])).filter(v => !isNaN(v)) : [];
     const npsAvg = npsVals.length ? (npsVals.reduce((a,b) => a+b, 0) / npsVals.length).toFixed(2) : 'N/A';
     const cols15 = get15Columns();
     const avgs = cols15.map(col => {
       const idx = excelColumns.indexOf(col);
-      const vals = data.map(row => Number(row[idx])).filter(v => !isNaN(v));
+      // Clean rows for this column
+      const colData = cleanRowsForColumn(data, excelColumns, col);
+      const vals = colData.map(row => Number(row[idx])).filter(v => !isNaN(v));
       const avg = vals.length ? (vals.reduce((a,b) => a+b, 0) / vals.length).toFixed(2) : 'N/A';
       return { col, avg };
     });
@@ -372,7 +778,9 @@ function App() {
   const calcDistribution = (data) => {
     const npsCol = getNPSColumn();
     const npsIdx = npsCol ? excelColumns.indexOf(npsCol) : -1;
-    const npsVals = npsIdx >= 0 ? data.map(row => Number(row[npsIdx])).filter(v => !isNaN(v)) : [];
+    // Clean NPS rows
+    const npsData = npsCol ? cleanRowsForColumn(data, excelColumns, npsCol) : [];
+    const npsVals = npsIdx >= 0 ? npsData.map(row => Number(row[npsIdx])).filter(v => !isNaN(v)) : [];
     const npsDist = [
       { name: '0-5', count: npsVals.filter(v => v >= 0 && v <= 5).length },
       { name: '6-10', count: npsVals.filter(v => v >= 6 && v <= 10).length },
@@ -380,7 +788,9 @@ function App() {
     const cols15 = get15Columns();
     const dists = cols15.map(col => {
       const idx = excelColumns.indexOf(col);
-      const vals = data.map(row => Number(row[idx])).filter(v => !isNaN(v));
+      // Clean rows for this column
+      const colData = cleanRowsForColumn(data, excelColumns, col);
+      const vals = colData.map(row => Number(row[idx])).filter(v => !isNaN(v));
       return [
         { name: `${col} 1-2`, count: vals.filter(v => v >= 1 && v <= 2).length },
         { name: `${col} 3-4`, count: vals.filter(v => v >= 3 && v <= 4).length },
@@ -395,18 +805,23 @@ function App() {
     const npsCol = getNPSColumn();
     const npsIdx = npsCol ? excelColumns.indexOf(npsCol) : -1;
     if (npsIdx < 0) return [];
-    const npsVals = data.map(row => Number(row[npsIdx])).filter(v => !isNaN(v));
+    // Clean NPS rows
+    const npsData = npsCol ? cleanRowsForColumn(data, excelColumns, npsCol) : [];
+    const npsVals = npsData.map(row => Number(row[npsIdx])).filter(v => !isNaN(v));
     const cols15 = get15Columns();
     return cols15.map(col => {
       const idx = excelColumns.indexOf(col);
-      const vals = data.map(row => Number(row[idx])).filter(v => !isNaN(v));
+      // Clean rows for this column
+      const colData = cleanRowsForColumn(data, excelColumns, col);
+      const vals = colData.map(row => Number(row[idx])).filter(v => !isNaN(v));
       if (npsVals.length !== vals.length || npsVals.length === 0) return { col, corr: 'N/A' };
       // Pearson correlation
       const meanX = npsVals.reduce((a,b) => a+b,0)/npsVals.length;
       const meanY = vals.reduce((a,b) => a+b,0)/vals.length;
       const num = npsVals.reduce((sum, x, i) => sum + (x-meanX)*(vals[i]-meanY), 0);
-      const den = Math.sqrt(npsVals.reduce((sum, x) => sum + (x-meanX)**2, 0)) * Math.sqrt(vals.reduce((sum, y) => sum + (y-meanY)**2, 0));
-      const corr = den === 0 ? 'N/A' : (num/den).toFixed(2);
+      const denX = Math.sqrt(npsVals.reduce((sum, x) => sum + Math.pow(x-meanX,2), 0));
+      const denY = Math.sqrt(vals.reduce((sum, y) => sum + Math.pow(y-meanY,2), 0));
+      const corr = denX && denY ? (num/(denX*denY)).toFixed(2) : 'N/A';
       return { col, corr };
     });
   };
@@ -780,29 +1195,10 @@ function App() {
               </header>
               {/* Collapsible Panels */}
               <div style={{ padding: 24 }}>
-                {/* Averages Panel */}
-                <CollapsiblePanel
-                  title="Averages"
-                  defaultOpen={true}
-                  borderColor="#d7e4de"
-                  focusColor="#2e9e6e"
-                  headerColor="#1f6a4a"
-                  bgColor="#103525"
-                  ariaLabel="Averages Panel"
-                >
-                  <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                    {[{ label: 'NPS', value: calcAverages(filterDataByDate()).npsAvg, col: 'NPS' }, ...calcAverages(filterDataByDate()).avgs].map((a, idx) => (
-                      <div key={a.col || a.label} style={{ flex: '1 1 0', minWidth: 110, background: COLORS.primarySurface, borderRadius: 12, boxShadow: '0 2px 8px 0 rgba(0,0,0,0.08)', padding: '10px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', border: `2px solid ${COLORS.primaryBorder}` }}>
-                        <span style={{ color: '#fff', fontWeight: 700, fontSize: 12, marginBottom: 4, textAlign: 'center', fontFamily: 'sans-serif' }}>{a.label || a.col}</span>
-                        <span style={{ color: '#ffd8a3', fontWeight: 900, fontSize: 16, textAlign: 'center', fontFamily: 'monospace', letterSpacing: 1 }}>{a.value !== undefined ? a.value : a.avg}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CollapsiblePanel>
                 {/* Predicted Categories Panel */}
                 <CollapsiblePanel
                   title="Predicted Categories Analysis"
-                  defaultOpen={true}
+                  defaultOpen={false}
                   borderColor="#d7e4de"
                   focusColor="#2e9e6e"
                   headerColor="#1f6a4a"
@@ -817,7 +1213,7 @@ function App() {
                 {categorySummary.length > 0 && (
                   <CollapsiblePanel
                     title="Category Distribution Bar Chart"
-                    defaultOpen={true}
+                    defaultOpen={false}
                     borderColor="#d7e4de"
                     focusColor="#2e9e6e"
                     headerColor="#1f6a4a"
@@ -843,6 +1239,9 @@ function App() {
                     </div>
                   </CollapsiblePanel>
                 )}
+                {/* NPS Panel */}
+                <NPSPanel data={rawExcelData} columns={excelColumns} />
+                <DonutChartsPanel data={rawExcelData} columns={excelColumns} />
               </div>
             </section>
           )}
@@ -895,9 +1294,9 @@ function App() {
                 >
                   Continue
                 </button>
-          </div>
-        </div>
-      )}
+              </div>
+            </div>
+          )}
           {error && <div style={{ color: 'red', marginTop: 16 }}>{error}</div>}
         </main>
       </div>
