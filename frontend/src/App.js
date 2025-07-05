@@ -597,7 +597,7 @@ function App() {
           continue;
         }
         // eslint-disable-next-line no-await-in-loop
-        const response = await axios.post('https://feedback-classifier-backend.onrender.com/classify', { text });  // using backend
+        const response = await axios.post('https://feedback-classifier-backend.onrender.com/predict', { text });  // using backend
         // Simulate confidence: if no categories, use max probability as confidence (for demo, randomize)
         let confidence = 0;
         if (response.data.categories.length === 0) {
